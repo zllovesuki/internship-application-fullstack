@@ -10,4 +10,6 @@ To visit the site, please click on either of the two links:
 
 [rachel-cf.miragespace.workers.dev](https://rachel-cf.miragespace.workers.dev/)
 
+Note: the GitHub repo does not include the updated `wrangler.toml` for security reason.
+
 Thank you for your time.
