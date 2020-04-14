@@ -1,7 +1,8 @@
 // where to get out URLs
 const variantsAPI = 'https://cfw-takehome.developers.workers.dev/api/variants'
-// regular expression to get out cookie
 const variantCookieName = 'variant'
+// regular expression to get out cookie
+// http://www.javascripter.net/faq/readingacookie.htm
 const cookieRe = new RegExp('[; ]' + variantCookieName + '=([^\\s;]*)')
 
 function getURLWeights(urls) {
