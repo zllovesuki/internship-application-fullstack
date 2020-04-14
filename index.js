@@ -38,7 +38,9 @@ async function getResponseStream(url, injectCookie) {
     let variantResponse = new Response(readable, response)
     if (injectCookie) {
         let encryptedURL = await aesGcmEncrypt(url, COOKIE_KEY)
-        variantResponse.headers.append('Set-Cookie', `${variantCookieName}=${encryptedURL}; path=/`)
+        let expires = new Date();
+        expires.setDate(expires.getDate() + 7) // persistent for one week
+        variantResponse.headers.append('Set-Cookie', `${variantCookieName}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/`)
     }
     return variantResponse
 }
