@@ -1,11 +1,46 @@
 /**
  * CloudFlare 2020 Summer Remote Internship Fullstack coding challenge
  * (c) Rachel Chen (@zllovesuki on Github)
+ *
+ * Important Notes:
+ * COOKIE_KEY is the secret used to encrypt/decrypt the variant URL before sending to the client
+ * Please make sure that you set this via "wrangler secret set COOKIE_KEY"
+ *
  */
 
 // where to get out URLs
 const variantsAPI = 'https://cfw-takehome.developers.workers.dev/api/variants'
 const variantCookieName = 'variant'
+
+/**
+ * Element handler to rewrite the link and text to my portfolio
+ */
+class LinkRewriter {
+    element(el) {
+        el.setAttribute('href', 'https://miragespace.com')
+        el.setInnerContent('See Rachel\'s Portfolio')
+    }
+}
+
+/**
+ * Element handler to add UTF-8 encoding, and change the title of the page
+ */
+class MetaRewriter {
+    element(el) {
+        // outrageously, document encoding was not set??
+        el.before('<meta charset="utf-8">', { html: true })
+        el.prepend('You are visiting ')
+    }
+}
+
+/**
+ * Element handler to change the description on the page
+ */
+class BodyRewriter {
+    element(el) {
+        el.setInnerContent('This is my version of CloudFlare\'s Summer 2020 Internship Coding Challenge. The variant will persist for one week (or you can just clear the cookie).')
+    }
+}
 
 /**
  * Helper function to generate the weight for each URL
@@ -37,12 +72,6 @@ async function getVariantsURL() {
     return variantsJson.variants
 }
 
-class LinkRewriter {
-    element(element) {
-        console.log(element.getAttribute('href'))
-    }
-}
-
 /**
  * Generate a Response by fetching from the variant.
  * Using Streaming Passthrough to avoid unnecessary buffering.
@@ -52,7 +81,9 @@ async function getResponseStream(url, injectCookie) {
     // https://developers.cloudflare.com/workers/reference/apis/streams/#streaming-passthrough
     let response = await fetch(url)
     let rewriter  = new HTMLRewriter()
-        .on('a', new LinkRewriter())
+        .on('title', new MetaRewriter())
+        .on('p#description', new BodyRewriter())
+        .on('a#url', new LinkRewriter())
 
     let variantResponse = new Response(rewriter.transform(response).body, response)
     if (injectCookie) {
