@@ -6,9 +6,6 @@
 // where to get out URLs
 const variantsAPI = 'https://cfw-takehome.developers.workers.dev/api/variants'
 const variantCookieName = 'variant'
-// regular expression to get out cookie
-// http://www.javascripter.net/faq/readingacookie.htm
-const cookieRe = new RegExp('[; ]' + variantCookieName + '=([^\\s;]*)')
 
 /**
  * Helper function to generate the weight for each URL
@@ -40,6 +37,12 @@ async function getVariantsURL() {
     return variantsJson.variants
 }
 
+class LinkRewriter {
+    element(element) {
+        console.log(element.getAttribute('href'))
+    }
+}
+
 /**
  * Generate a Response by fetching from the variant.
  * Using Streaming Passthrough to avoid unnecessary buffering.
@@ -48,16 +51,39 @@ async function getVariantsURL() {
 async function getResponseStream(url, injectCookie) {
     // https://developers.cloudflare.com/workers/reference/apis/streams/#streaming-passthrough
     let response = await fetch(url)
-    let { readable, writable } = new TransformStream()
-    response.body.pipeTo(writable)
-    let variantResponse = new Response(readable, response)
+    let rewriter  = new HTMLRewriter()
+        .on('a', new LinkRewriter())
+
+    let variantResponse = new Response(rewriter.transform(response).body, response)
     if (injectCookie) {
         const encryptedURL = await aesGcmEncrypt(url, COOKIE_KEY)
         let expires = new Date()
         expires.setDate(expires.getDate() + 7) // persistent for one week
-        variantResponse.headers.append('Set-Cookie', `${variantCookieName}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/`)
+        variantResponse.headers.append('Set-Cookie', `${variantCookieName}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/;`)
     }
     return variantResponse
+}
+
+// via https://developers.cloudflare.com/workers/templates/pages/cookie_extract/
+/**
+ * Grabs the cookie with name from the request headers
+ * @param {Request} request incoming Request
+ * @param {string} name of the cookie to grab
+ */
+function getCookie(request, name) {
+    let result = null
+    let cookieString = request.headers.get('Cookie')
+    if (cookieString) {
+        let cookies = cookieString.split(';')
+        cookies.forEach(cookie => {
+            let cookieName = cookie.split('=')[0].trim()
+            if (cookieName === name) {
+                let cookieVal = cookie.split('=')[1]
+                result = cookieVal
+            }
+        })
+    }
+    return result
 }
 
 /**
@@ -65,14 +91,10 @@ async function getResponseStream(url, injectCookie) {
  * Returns null if variant Cookie is not found or the Cookie was tampered
  */
 async function getVariantFromCookie(request) {
-    const cookieString = request.headers.get('Cookie')
-    if (!cookieString) {
-        return null
-    }
-    const cookieMatch = cookieString.match(cookieString)
-    if (cookieMatch) {
+    const encryptedURL = getCookie(request, variantCookieName)
+    if (encryptedURL) {
         try {
-            return await aesGcmDecrypt(cookieMatch[1], COOKIE_KEY)
+            return await aesGcmDecrypt(encryptedURL, COOKIE_KEY)
         } catch(e) {}
     }
     return null
