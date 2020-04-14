@@ -10,10 +10,17 @@ const variantCookieName = 'variant'
 // http://www.javascripter.net/faq/readingacookie.htm
 const cookieRe = new RegExp('[; ]' + variantCookieName + '=([^\\s;]*)')
 
+/**
+ * Helper function to generate the weight for each URL
+ * Currently it is equally likely to get either one
+ */
 function getURLWeights(urls) {
     return urls.map(() => 50) // 50/50 chance
 }
 
+/**
+ * Return an URL from the list randomly based on a predetermined weight
+ */
 function selectURL(urls) {
     let weights = getURLWeights(urls)
     let weightSum = weights.reduce((accumulator, weight) => accumulator + weight, 0)
@@ -24,12 +31,20 @@ function selectURL(urls) {
     return urls[weights.findIndex(prob => prob > rand)]
 }
 
+/**
+ * Async function to return a list of variants
+ */
 async function getVariantsURL() {
     let variantsResp = await fetch(variantsAPI)
     let variantsJson = await variantsResp.json()
     return variantsJson.variants
 }
 
+/**
+ * Generate a Response by fetching from the variant.
+ * Using Streaming Passthrough to avoid unnecessary buffering.
+ * It also optionally injects an encrypted Cookie to persist which variant the visitor will see
+ */
 async function getResponseStream(url, injectCookie) {
     // https://developers.cloudflare.com/workers/reference/apis/streams/#streaming-passthrough
     let response = await fetch(url)
@@ -37,33 +52,39 @@ async function getResponseStream(url, injectCookie) {
     response.body.pipeTo(writable)
     let variantResponse = new Response(readable, response)
     if (injectCookie) {
-        let encryptedURL = await aesGcmEncrypt(url, COOKIE_KEY)
-        let expires = new Date();
+        const encryptedURL = await aesGcmEncrypt(url, COOKIE_KEY)
+        let expires = new Date()
         expires.setDate(expires.getDate() + 7) // persistent for one week
         variantResponse.headers.append('Set-Cookie', `${variantCookieName}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/`)
     }
     return variantResponse
 }
 
-function getVariantFromCookie(cookieString) {
-    let cookieMatch = cookieString.match(cookieRe)
+/**
+ * Attempt to get the encrypted URL from Cookie and decrypt it
+ * Returns null if variant Cookie is not found or the Cookie was tampered
+ */
+async function getVariantFromCookie(request) {
+    const cookieString = request.headers.get('Cookie')
+    if (!cookieString) {
+        return null
+    }
+    const cookieMatch = cookieString.match(cookieString)
     if (cookieMatch) {
-        return cookieMatch[1]
+        try {
+            return await aesGcmDecrypt(cookieMatch[1], COOKIE_KEY)
+        } catch(e) {}
     }
     return null
 }
 
+/**
+ * Request Handler
+ */
 async function handleRequest(request) {
     // A/B Testing cookie: https://developers.cloudflare.com/workers/templates/#ab_testing
-    let variantURL = null;
     let injectVariantCookie = false
-    const cookie = request.headers.get('cookie')
-    if (cookie) {
-        try {
-            encryptedURL = getVariantFromCookie(cookie)
-            variantURL = await aesGcmDecrypt(encryptedURL, COOKIE_KEY)
-        } catch(e) {}
-    }
+    let variantURL = await getVariantFromCookie(request)
     if (!variantURL) {
         let urls = await getVariantsURL()
         variantURL = selectURL(urls)
@@ -72,6 +93,9 @@ async function handleRequest(request) {
     return getResponseStream(variantURL, injectVariantCookie)
 }
 
+/**
+ * Entry point
+ */
 addEventListener('fetch', event => {
     event.respondWith(handleRequest(event.request))
 })
