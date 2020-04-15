@@ -39,7 +39,7 @@ class BodyRewriter {
 }
 
 /**
- * Worker constatns
+ * Worker constants
  */
 // where to get out URLs
 const VARIANTS_API = 'https://cfw-takehome.developers.workers.dev/api/variants'
