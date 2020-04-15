@@ -38,7 +38,7 @@ class MetaRewriter {
  */
 class BodyRewriter {
     element(el) {
-        el.setInnerContent('This is my version of CloudFlare\'s Summer 2020 Internship Coding Challenge. The variant will persist for one week (or you can just clear the cookie).')
+        el.setInnerContent('This is <a style="color: #3090C7" href="https://github.com/zllovesuki/internship-application-fullstack">my version</a> of CloudFlare\'s Summer 2020 Internship Coding Challenge. The variant will persist for one week (or you can just clear the cookie).', { html: true} )
     }
 }
 
