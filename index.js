@@ -99,8 +99,9 @@ async function getStatefulKey() {
  * It also optionally injects an encrypted Cookie to persist which variant the visitor will see
  */
 async function getResponseStream(request, url, injectCookie) {
-    // https://developers.cloudflare.com/workers/reference/apis/streams/#streaming-passthrough
-    let response = await fetch(url, request)
+    let requestURL = new URL(request.url)
+    let actualURL = url + requestURL.pathname + requestURL.search
+    let response = await fetch(actualURL, request)
     let variantResponse = REWRITER.transform(response)
     if (injectCookie) {
         const encryptedURL = await aesGcmEncrypt(url, await getStatefulKey())
