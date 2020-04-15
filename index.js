@@ -8,10 +8,6 @@
  *
  */
 
-// where to get out URLs
-const variantsAPI = 'https://cfw-takehome.developers.workers.dev/api/variants'
-const variantCookieName = 'variant'
-
 /**
  * Element handler to rewrite the link and text to my portfolio
  */
@@ -43,6 +39,17 @@ class BodyRewriter {
 }
 
 /**
+ * Worker constatns
+ */
+// where to get out URLs
+const VARIANTS_API = 'https://cfw-takehome.developers.workers.dev/api/variants'
+const VARIANT_COOKIE_NAME = 'variant'
+const REWRITER  = new HTMLRewriter()
+    .on('title', new MetaRewriter())
+    .on('p#description', new BodyRewriter())
+    .on('a#url', new LinkRewriter())
+
+/**
  * Helper function to generate the weight for each URL
  * Currently it is equally likely to get either one
  */
@@ -67,7 +74,7 @@ function selectURL(urls) {
  * Async function to return a list of variants
  */
 async function getVariantsURL() {
-    let variantsResp = await fetch(variantsAPI)
+    let variantsResp = await fetch(VARIANTS_API)
     let variantsJson = await variantsResp.json()
     return variantsJson.variants
 }
@@ -80,17 +87,12 @@ async function getVariantsURL() {
 async function getResponseStream(url, injectCookie) {
     // https://developers.cloudflare.com/workers/reference/apis/streams/#streaming-passthrough
     let response = await fetch(url)
-    let rewriter  = new HTMLRewriter()
-        .on('title', new MetaRewriter())
-        .on('p#description', new BodyRewriter())
-        .on('a#url', new LinkRewriter())
-
-    let variantResponse = new Response(rewriter.transform(response).body, response)
+    let variantResponse = new Response(REWRITER.transform(response).body, response)
     if (injectCookie) {
         const encryptedURL = await aesGcmEncrypt(url, COOKIE_KEY)
         let expires = new Date()
         expires.setDate(expires.getDate() + 7) // persistent for one week
-        variantResponse.headers.append('Set-Cookie', `${variantCookieName}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/;`)
+        variantResponse.headers.append('Set-Cookie', `${VARIANT_COOKIE_NAME}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/;`)
     }
     return variantResponse
 }
@@ -102,19 +104,18 @@ async function getResponseStream(url, injectCookie) {
  * @param {string} name of the cookie to grab
  */
 function getCookie(request, name) {
-    let result = null
     let cookieString = request.headers.get('Cookie')
     if (cookieString) {
         let cookies = cookieString.split(';')
-        cookies.forEach(cookie => {
+        for (const cookie of cookies) {
             let cookieName = cookie.split('=')[0].trim()
             if (cookieName === name) {
                 let cookieVal = cookie.split('=')[1]
-                result = cookieVal
+                return cookieVal
             }
-        })
+        }
     }
-    return result
+    return null
 }
 
 /**
@@ -122,7 +123,7 @@ function getCookie(request, name) {
  * Returns null if variant Cookie is not found or the Cookie was tampered
  */
 async function getVariantFromCookie(request) {
-    const encryptedURL = getCookie(request, variantCookieName)
+    const encryptedURL = getCookie(request, VARIANT_COOKIE_NAME)
     if (encryptedURL) {
         try {
             return await aesGcmDecrypt(encryptedURL, COOKIE_KEY)
