@@ -42,8 +42,9 @@ class BodyRewriter {
  * Worker constants
  */
 // where to get out URLs
-const VARIANTS_API = 'https://cfw-takehome.developers.workers.dev/api/variants'
+const VARIANTS_API_URL = new URL('https://cfw-takehome.developers.workers.dev/api/variants')
 const VARIANT_COOKIE_NAME = 'variant'
+const FAVICON_RE = new RegExp('favicon.ico$')
 const REWRITER  = new HTMLRewriter()
     .on('title', new MetaRewriter())
     .on('p#description', new BodyRewriter())
@@ -74,7 +75,7 @@ function selectURL(urls) {
  * Async function to return a list of variants, and cache it for 5 minutes
  */
 async function getVariantsURL() {
-    let variantsResp = await fetch(VARIANTS_API, { cf: { cacheTtl: 300 } })
+    let variantsResp = await fetch(VARIANTS_API_URL.href, { cf: { cacheTtl: 300 } })
     let variantsJson = await variantsResp.json()
     return variantsJson.variants
 }
@@ -108,6 +109,13 @@ async function getResponseStream(request, url, injectCookie) {
         variantResponse.headers.append('Set-Cookie', `${VARIANT_COOKIE_NAME}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/;`)
     }
     return variantResponse
+}
+
+/**
+ * Generate a Response for favicon
+ */
+async function getFaviconStream(request) {
+    return await fetch(VARIANTS_API_URL.origin + '/favicon.ico', request)
 }
 
 // via https://developers.cloudflare.com/workers/templates/pages/cookie_extract/
@@ -154,6 +162,10 @@ async function getVariantFromCookie(request) {
  * becomes invalid.
  */
 async function handleRequest(request) {
+    // of course we cannot forget the lovely favicon
+    if (FAVICON_RE.test(request.url)) {
+        return getFaviconStream(request)
+    }
     // A/B Testing cookie: https://developers.cloudflare.com/workers/templates/#ab_testing
     let injectVariantCookie = false
     let variantURL = await getVariantFromCookie(request)
