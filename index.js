@@ -101,7 +101,7 @@ async function getStatefulKey() {
 async function getResponseStream(request, url, injectCookie) {
     // https://developers.cloudflare.com/workers/reference/apis/streams/#streaming-passthrough
     let response = await fetch(url, request)
-    let variantResponse = new Response(REWRITER.transform(response).body, response)
+    let variantResponse = REWRITER.transform(response)
     if (injectCookie) {
         const encryptedURL = await aesGcmEncrypt(url, await getStatefulKey())
         let expires = new Date()
