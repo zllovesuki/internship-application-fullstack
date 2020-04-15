@@ -81,12 +81,15 @@ async function getVariantsURL() {
 
 /**
  * Generate a Response by fetching from the variant.
- * Using Streaming Passthrough to avoid unnecessary buffering.
+ *
+ * It will passthrough client's request to upstream unmodified,
+ * and the response will be piped to avoid unnecessary buffering.
+ * (Well, the response will be rewritten as part of the extra credit)
  * It also optionally injects an encrypted Cookie to persist which variant the visitor will see
  */
-async function getResponseStream(url, injectCookie) {
+async function getResponseStream(request, url, injectCookie) {
     // https://developers.cloudflare.com/workers/reference/apis/streams/#streaming-passthrough
-    let response = await fetch(url)
+    let response = await fetch(url, request)
     let variantResponse = new Response(REWRITER.transform(response).body, response)
     if (injectCookie) {
         const encryptedURL = await aesGcmEncrypt(url, COOKIE_KEY)
@@ -144,7 +147,7 @@ async function handleRequest(request) {
         variantURL = selectURL(urls)
         injectVariantCookie = true
     }
-    return getResponseStream(variantURL, injectVariantCookie)
+    return getResponseStream(request, variantURL, injectVariantCookie)
 }
 
 /**
