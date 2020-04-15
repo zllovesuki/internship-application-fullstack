@@ -137,6 +137,13 @@ async function getVariantFromCookie(request) {
 
 /**
  * Request Handler
+ * Note: We will passthrough client's request, and no error handling will be done.
+ * We assume the backend will be there we we fetch it, and variant URL won't be changed
+ * after it is set via Cookie
+ * I fully embrace Erlang's "Let It Crash" philosophy, although I should probably handle
+ * the case where the URL does change.
+ * If that's the case, the stateful data should probably be stored in KV instead of Cookie,
+ * but let's not make to too complicated for this simple application.
  */
 async function handleRequest(request) {
     // A/B Testing cookie: https://developers.cloudflare.com/workers/templates/#ab_testing
