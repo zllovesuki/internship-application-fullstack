@@ -71,12 +71,22 @@ function selectURL(urls) {
 }
 
 /**
- * Async function to return a list of variants
+ * Async function to return a list of variants, and cache it for 5 minutes
  */
 async function getVariantsURL() {
-    let variantsResp = await fetch(VARIANTS_API)
+    let variantsResp = await fetch(VARIANTS_API, { cf: { cacheTtl: 300 } })
     let variantsJson = await variantsResp.json()
     return variantsJson.variants
+}
+
+/**
+ * Helper function to concat the known valid variants URL and the COOKIE_KEY to
+ * get a stateful encryption key. Whenever the variants URLs change, prior
+ * variant Cookie will be invalidated, and forcing a re-fetch
+ */
+async function getStatefulKey() {
+    let variantsURL = await getVariantsURL()
+    return COOKIE_KEY + variantsURL.reduce((str, url) => str + url, '')
 }
 
 /**
@@ -92,7 +102,7 @@ async function getResponseStream(request, url, injectCookie) {
     let response = await fetch(url, request)
     let variantResponse = new Response(REWRITER.transform(response).body, response)
     if (injectCookie) {
-        const encryptedURL = await aesGcmEncrypt(url, COOKIE_KEY)
+        const encryptedURL = await aesGcmEncrypt(url, await getStatefulKey())
         let expires = new Date()
         expires.setDate(expires.getDate() + 7) // persistent for one week
         variantResponse.headers.append('Set-Cookie', `${VARIANT_COOKIE_NAME}=${encryptedURL}; Expires=${expires.toGMTString()}; Secure; HttpOnly; path=/;`)
@@ -129,7 +139,7 @@ async function getVariantFromCookie(request) {
     const encryptedURL = getCookie(request, VARIANT_COOKIE_NAME)
     if (encryptedURL) {
         try {
-            return await aesGcmDecrypt(encryptedURL, COOKIE_KEY)
+            return await aesGcmDecrypt(encryptedURL, await getStatefulKey())
         } catch(e) {}
     }
     return null
@@ -138,12 +148,10 @@ async function getVariantFromCookie(request) {
 /**
  * Request Handler
  * Note: We will passthrough client's request, and no error handling will be done.
- * We assume the backend will be there we we fetch it, and variant URL won't be changed
- * after it is set via Cookie
- * I fully embrace Erlang's "Let It Crash" philosophy, although I should probably handle
- * the case where the URL does change.
- * If that's the case, the stateful data should probably be stored in KV instead of Cookie,
- * but let's not make to too complicated for this simple application.
+ * We assume the backend will be there when we fetch it (a testament to to CloudFlare's reliability)
+ *
+ * This should handle the case where upstream variant URLs were changed and prior variant URL
+ * becomes invalid.
  */
 async function handleRequest(request) {
     // A/B Testing cookie: https://developers.cloudflare.com/workers/templates/#ab_testing
